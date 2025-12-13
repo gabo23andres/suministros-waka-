@@ -35,8 +35,8 @@ const initialRawMaterialsMock: RawMaterial[] = [
 ];
 
 const initialClientsMock: Client[] = [
-    { id: 'cli-1', name: 'Inversiones Waka C.A.', rif: 'J-50293847-1', email: 'contacto@waka.ve', phone: '0414-1234567', address: 'Zona Industrial Guacara', creditLimit: 1000 },
-    { id: 'cli-2', name: 'Distribuidora Los Andes', rif: 'J-30495822-0', email: 'compras@losandes.com', phone: '0412-9876543', address: 'Av. Bolívar, Valencia', creditLimit: 500 },
+    { id: 'cli-1', name: 'Inversiones Waka C.A.', rif: 'J-50293847-1', email: 'contacto@waka.ve', phone: '0414-1234567', address: 'Zona Industrial Guacara', creditLimit: 1000, priceTier: 'A' },
+    { id: 'cli-2', name: 'Distribuidora Los Andes', rif: 'J-30495822-0', email: 'compras@losandes.com', phone: '0412-9876543', address: 'Av. Bolívar, Valencia', creditLimit: 500, priceTier: 'B' },
 ];
 
 const initialWorkflowsMock: Workflow[] = [

@@ -60,7 +60,9 @@ export interface InventoryItem {
   name: string;
   sku: string;
   quantity: number;
-  price: number;
+  price: number; // Base Price (Tier A)
+  priceB?: number; // Wholesale (Tier B)
+  priceC?: number; // VIP/Distributor (Tier C)
   category: string;
   status: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
 }
@@ -111,6 +113,7 @@ export interface Client {
   address: string;
   creditLimit: number;
   notes?: string;
+  priceTier: 'A' | 'B' | 'C'; // Determines which price list to use
 }
 
 export interface AuditLog {

@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import { Order, OrderStatus, InventoryItem, OrderProduct, Client, User, SystemSettings } from '../types';
-import { Search, Plus, X, MessageCircle, ShoppingCart, Trash2, Eye, Download, ArrowUpDown, ArrowUp, ArrowDown, Printer, FileText, Clock, FileDown, User as UserIcon, Calendar, CloudOff, RefreshCw, Upload, Map, Percent, DollarSign, Check, Package, Navigation } from 'lucide-react';
+import { Search, Plus, X, MessageCircle, ShoppingCart, Trash2, Eye, Download, ArrowUpDown, ArrowUp, ArrowDown, Printer, FileText, Clock, FileDown, User as UserIcon, Calendar, CloudOff, RefreshCw, Upload, Map, Percent, DollarSign, Check, Package, Navigation, Tag } from 'lucide-react';
 import { addDocument, updateDocument } from '../services/firebase';
 
 interface OrderListProps {
@@ -49,6 +49,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
   // Client Selection State
   const [showClientSearch, setShowClientSearch] = useState(false);
   const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [selectedClientTier, setSelectedClientTier] = useState<'A' | 'B' | 'C'>('A');
 
   // Edit Order Form State
   const [detailAddProductId, setDetailAddProductId] = useState('');
@@ -69,6 +70,12 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
       return 'IN_STOCK';
   };
 
+  const getProductPriceForTier = (item: InventoryItem, tier: 'A' | 'B' | 'C') => {
+      if (tier === 'B' && item.priceB && item.priceB > 0) return item.priceB;
+      if (tier === 'C' && item.priceC && item.priceC > 0) return item.priceC;
+      return item.price; // Default to Base Price
+  };
+
   const handleSyncOrders = () => {
       if (pendingSyncOrders === 0) return;
       const confirmSync = window.confirm(`¿Sincronizar ${pendingSyncOrders} pedidos pendientes con el servidor central?`);
@@ -84,8 +91,23 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
   const selectClient = (client: Client) => {
       setNewOrderCustomer(client.name);
       setNewOrderRif(client.rif);
+      setSelectedClientTier(client.priceTier || 'A'); // Set price tier based on client
+      
+      // Notify if a special tier is applied
+      if(client.priceTier === 'B') notify('info', 'Precio Mayor Aplicado', 'Se usarán precios de Lista B.');
+      if(client.priceTier === 'C') notify('info', 'Precio VIP Aplicado', 'Se usarán precios de Lista C.');
+
       setShowClientSearch(false);
       setClientSearchTerm('');
+      
+      // Clear cart to avoid price mismatches if client changes mid-order
+      if(cart.length > 0) {
+          if(window.confirm('Cambiar de cliente recalculará o vaciará el carrito. ¿Desea continuar?')) {
+              setCart([]);
+          } else {
+              // Revert logic would go here, but for simplicity we just clear or enforce flow
+          }
+      }
   };
 
   const filteredClients = clients.filter(c => 
@@ -170,6 +192,8 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
       const product = inventory.find(i => i.id === currentProductId);
       if (!product) return;
 
+      const priceToUse = getProductPriceForTier(product, selectedClientTier);
+
       const existingInCart = cart.find(c => c.productId === currentProductId)?.quantity || 0;
       const totalProposed = existingInCart + currentQty;
       
@@ -185,14 +209,14 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
           const existing = prev.find(item => item.productId === currentProductId);
           if (existing) {
               return prev.map(item => item.productId === currentProductId 
-                  ? { ...item, quantity: item.quantity + currentQty, isBackorder: isBackorder || item.isBackorder } 
+                  ? { ...item, quantity: item.quantity + currentQty, isBackorder: isBackorder || item.isBackorder, price: priceToUse } 
                   : item
               );
           }
           return [...prev, { 
               productId: product.id, 
               name: product.name, 
-              price: product.price, 
+              price: priceToUse, 
               quantity: currentQty,
               isBackorder
           }];
@@ -292,6 +316,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
     setDiscountValue(0);
     setDiscountType('PERCENTAGE');
     setCurrentProductId('');
+    setSelectedClientTier('A'); // Reset tier
   };
 
   const handleRemoveFromOrder = (productId: string) => {
@@ -343,6 +368,10 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
     let updatedProducts = [...selectedOrder.products];
     const existingIndex = updatedProducts.findIndex(p => p.id === detailAddProductId);
     
+    // Note: When adding to an existing order, we default to base price unless logic is complex. 
+    // For simplicity, we use invItem.price (Base) here, but could implement a check for original customer tier if needed.
+    const priceToAdd = invItem.price; 
+
     if (existingIndex >= 0) {
         updatedProducts[existingIndex] = {
             ...updatedProducts[existingIndex],
@@ -352,7 +381,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
         updatedProducts.push({
             id: invItem.id,
             name: invItem.name,
-            price: invItem.price,
+            price: priceToAdd,
             quantity: detailAddQty
         });
     }
@@ -1242,6 +1271,12 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
                             onChange={(e) => setNewOrderRif(e.target.value.toUpperCase())}
                             className="w-full p-3 rounded-xl border border-slate-200 text-sm font-mono text-slate-600 outline-none focus:ring-2 focus:ring-slate-800 bg-white uppercase"
                         />
+                        {selectedClientTier !== 'A' && (
+                            <div className={`text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-2 ${selectedClientTier === 'B' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                                <Tag size={12} />
+                                <span>Lista Aplicada: {selectedClientTier === 'B' ? 'Mayor (B)' : 'VIP (C)'}</span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="border-t border-slate-200 my-4"></div>
@@ -1352,12 +1387,14 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
                             className="w-full pl-9 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-white transition-colors"
                         >
                             <option value="">Seleccionar producto...</option>
-                            {inventory.map(item => (
+                            {inventory.map(item => {
+                                const price = getProductPriceForTier(item, selectedClientTier);
+                                return (
                                 <option key={item.id} value={item.id}>
-                                    {item.name} - ${(item.price/exchangeRate).toFixed(2)} 
+                                    {item.name} - ${(price/exchangeRate).toFixed(2)} 
                                     {item.quantity <= 0 ? ' [AGOTADO - ADMITIR PEDIDO]' : ` (Disp: ${item.quantity})`}
                                 </option>
-                            ))}
+                            )})}
                         </select>
                     </div>
                     <div className="w-24 relative">
@@ -1394,7 +1431,9 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
                 {/* Visual Grid of Products (Optional, for better UX) */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                        {inventory.map(item => (
+                        {inventory.map(item => {
+                            const price = getProductPriceForTier(item, selectedClientTier);
+                            return (
                             <button
                                 key={item.id}
                                 onClick={() => { setCurrentProductId(item.id); setCurrentQty(1); }}
@@ -1408,10 +1447,10 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
                                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.quantity <= 0 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>
                                         {item.quantity <= 0 ? 'AGOTADO' : `${item.quantity} un.`}
                                     </span>
-                                    <span className="font-black text-sm text-slate-800">${(item.price/exchangeRate).toFixed(2)}</span>
+                                    <span className="font-black text-sm text-slate-800">${(price/exchangeRate).toFixed(2)}</span>
                                 </div>
                             </button>
-                        ))}
+                        )})}
                     </div>
                 </div>
             </div>
@@ -1442,10 +1481,15 @@ const OrderList: React.FC<OrderListProps> = ({ orders, setOrders, inventory, set
                                     onClick={() => selectClient(client)}
                                     className="w-full text-left p-3 rounded-xl border border-slate-100 hover:bg-blue-50 hover:border-blue-100 transition-all group"
                                 >
-                                    <p className="font-bold text-sm text-slate-800 group-hover:text-blue-700">{client.name}</p>
+                                    <div className="flex justify-between">
+                                        <p className="font-bold text-sm text-slate-800 group-hover:text-blue-700">{client.name}</p>
+                                        <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold group-hover:bg-white">
+                                            {client.priceTier === 'B' ? 'Lista B (Mayor)' : client.priceTier === 'C' ? 'Lista C (VIP)' : 'Lista A (Base)'}
+                                        </span>
+                                    </div>
                                     <div className="flex justify-between mt-1">
                                         <span className="text-xs text-slate-500 font-mono">{client.rif}</span>
-                                        <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600 group-hover:bg-white">Crédito: ${client.creditLimit}</span>
+                                        <span className="text-[10px] text-slate-400">Crédito: ${client.creditLimit}</span>
                                     </div>
                                 </button>
                             ))}

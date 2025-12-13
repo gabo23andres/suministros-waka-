@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Client } from '../types';
-import { Search, Users, Plus, Pencil, Trash2, X, MapPin, Phone, Mail, CreditCard, Building } from 'lucide-react';
+import { Search, Users, Plus, Pencil, Trash2, X, MapPin, Phone, Mail, CreditCard, Building, Tag } from 'lucide-react';
 import { addDocument, updateDocument, deleteDocument } from '../services/firebase';
 
 interface ClientListProps {
@@ -23,7 +23,8 @@ const ClientList: React.FC<ClientListProps> = ({ clients, setClients, notify, lo
       phone: '',
       address: '',
       creditLimit: 0,
-      notes: ''
+      notes: '',
+      priceTier: 'A'
   });
 
   const handleSave = () => {
@@ -50,7 +51,7 @@ const ClientList: React.FC<ClientListProps> = ({ clients, setClients, notify, lo
   };
 
   const resetForm = () => {
-      setFormData({ name: '', rif: '', email: '', phone: '', address: '', creditLimit: 0, notes: '' });
+      setFormData({ name: '', rif: '', email: '', phone: '', address: '', creditLimit: 0, notes: '', priceTier: 'A' });
       setEditingId(null);
   };
 
@@ -67,6 +68,12 @@ const ClientList: React.FC<ClientListProps> = ({ clients, setClients, notify, lo
           notify('info', 'Cliente Eliminado', 'Registro borrado.');
       }
   };
+
+  const getTierLabel = (tier: string) => {
+      if(tier === 'B') return 'Mayor (B)';
+      if(tier === 'C') return 'VIP (C)';
+      return 'Base (A)';
+  }
 
   const filteredClients = clients.filter(c => 
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -138,7 +145,9 @@ const ClientList: React.FC<ClientListProps> = ({ clients, setClients, notify, lo
                        </div>
 
                        <div className="mt-4 pt-3 border-t border-slate-50 flex justify-between items-center">
-                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Crédito</span>
+                           <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded text-[10px] font-bold text-slate-500">
+                                <Tag size={10} /> Lista: {getTierLabel(client.priceTier)}
+                           </div>
                            <span className="text-sm font-bold text-emerald-600 flex items-center gap-1">
                                <CreditCard size={12} /> ${client.creditLimit.toFixed(2)}
                            </span>
@@ -186,6 +195,18 @@ const ClientList: React.FC<ClientListProps> = ({ clients, setClients, notify, lo
                            <div>
                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Límite de Crédito ($)</label>
                                <input type="number" value={formData.creditLimit} onChange={e => setFormData({...formData, creditLimit: Number(e.target.value)})} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-500 text-sm font-bold" />
+                           </div>
+                           <div>
+                               <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Lista de Precios</label>
+                               <select 
+                                    value={formData.priceTier} 
+                                    onChange={e => setFormData({...formData, priceTier: e.target.value as any})} 
+                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-500 text-sm bg-white font-bold text-slate-700"
+                                >
+                                   <option value="A">Base (Público)</option>
+                                   <option value="B">Lista B (Mayor)</option>
+                                   <option value="C">Lista C (VIP)</option>
+                               </select>
                            </div>
                        </div>
                    </div>

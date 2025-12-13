@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { InventoryItem, SystemSettings } from '../types';
-import { Search, Package, AlertTriangle, CheckCircle, XCircle, Plus, Trash2, X, Zap, Minus, Pencil, Clock, Filter, BarChart3, TrendingUp, FileText, Printer, FileDown, ArrowUpDown, ArrowUp, ArrowDown, Layers, Sparkles, DollarSign, Archive, MoreVertical } from 'lucide-react';
+import { Search, Package, AlertTriangle, CheckCircle, XCircle, Plus, Trash2, X, Zap, Minus, Pencil, Clock, Filter, BarChart3, TrendingUp, FileText, Printer, FileDown, ArrowUpDown, ArrowUp, ArrowDown, Layers, Sparkles, DollarSign, Archive, MoreVertical, Tag } from 'lucide-react';
 import { analyzeInventoryOptimization } from '../services/geminiService';
 import { addDocument, updateDocument, deleteDocument } from '../services/firebase';
 
@@ -40,12 +40,16 @@ const InventoryList: React.FC<InventoryListProps> = ({ inventory, setInventory, 
       category: string;
       quantity: number;
       priceUSD: number;
+      priceBUSD: number;
+      priceCUSD: number;
   }>({
     name: '',
     sku: '',
     category: '',
     quantity: 0,
-    priceUSD: 0
+    priceUSD: 0,
+    priceBUSD: 0,
+    priceCUSD: 0
   });
 
   const inventoryWithABC = useMemo(() => {
@@ -148,14 +152,16 @@ const InventoryList: React.FC<InventoryListProps> = ({ inventory, setInventory, 
           sku: item.sku,
           category: item.category,
           quantity: item.quantity,
-          priceUSD: Number((item.price / exchangeRate).toFixed(2))
+          priceUSD: Number((item.price / exchangeRate).toFixed(2)),
+          priceBUSD: item.priceB ? Number((item.priceB / exchangeRate).toFixed(2)) : 0,
+          priceCUSD: item.priceC ? Number((item.priceC / exchangeRate).toFixed(2)) : 0,
       });
       setEditingId(item.id);
       setShowModal(true);
   };
 
   const openCreateModal = () => {
-      setFormData({ name: '', sku: '', category: '', quantity: 0, priceUSD: 0 });
+      setFormData({ name: '', sku: '', category: '', quantity: 0, priceUSD: 0, priceBUSD: 0, priceCUSD: 0 });
       setEditingId(null);
       setShowModal(true);
   };
@@ -166,26 +172,27 @@ const InventoryList: React.FC<InventoryListProps> = ({ inventory, setInventory, 
     const quantity = formData.quantity;
     const status = calculateStatus(quantity);
     const priceInBs = formData.priceUSD * exchangeRate;
+    const priceBInBs = formData.priceBUSD > 0 ? formData.priceBUSD * exchangeRate : undefined;
+    const priceCInBs = formData.priceCUSD > 0 ? formData.priceCUSD * exchangeRate : undefined;
+
+    const dataPayload = {
+        name: formData.name,
+        sku: formData.sku,
+        category: formData.category || 'General',
+        price: priceInBs,
+        priceB: priceBInBs,
+        priceC: priceCInBs,
+        quantity,
+        status
+    };
 
     if (editingId) {
-        updateDocument('inventory', editingId, {
-            name: formData.name,
-            sku: formData.sku,
-            category: formData.category || 'General',
-            price: priceInBs,
-            quantity,
-            status
-        });
-        logAction('INVENTORY', 'UPDATE', `Producto actualizado: ${formData.name} (${quantity})`);
+        updateDocument('inventory', editingId, dataPayload);
+        logAction('INVENTORY', 'UPDATE', `Producto actualizado: ${formData.name}`);
     } else {
         const newItem: InventoryItem = {
             id: `inv-${Date.now()}`,
-            name: formData.name,
-            sku: formData.sku,
-            category: formData.category || 'General',
-            quantity: quantity,
-            price: priceInBs,
-            status: status
+            ...dataPayload,
         };
         addDocument('inventory', newItem);
         logAction('INVENTORY', 'CREATE', `Nuevo producto: ${formData.name}`);
@@ -193,7 +200,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ inventory, setInventory, 
 
     setShowModal(false);
     setEditingId(null);
-    setFormData({ name: '', sku: '', category: '', quantity: 0, priceUSD: 0 });
+    setFormData({ name: '', sku: '', category: '', quantity: 0, priceUSD: 0, priceBUSD: 0, priceCUSD: 0 });
   };
 
   const triggerAutomation = () => {
@@ -519,7 +526,9 @@ const InventoryList: React.FC<InventoryListProps> = ({ inventory, setInventory, 
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="text-slate-800 font-black text-sm">${(item.price/exchangeRate).toFixed(2)}</div>
-                    <div className="text-[11px] text-slate-400 font-medium">Bs. {item.price.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    {item.priceB && (
+                         <div className="text-[10px] text-blue-500 font-bold" title="Precio Mayor">M: ${(item.priceB/exchangeRate).toFixed(2)}</div>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-center">
                     {getStatusBadge(item.status, item.quantity)}
@@ -552,8 +561,8 @@ const InventoryList: React.FC<InventoryListProps> = ({ inventory, setInventory, 
        {/* Edit/Create Modal */}
        {showModal && (
         <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in border border-slate-100 transform transition-all scale-100">
-            <div className="p-6 flex justify-between items-center bg-white border-b border-slate-50">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in border border-slate-100 transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
+            <div className="p-6 flex justify-between items-center bg-white border-b border-slate-50 sticky top-0 z-20">
               <div>
                   <h3 className="font-bold text-lg text-slate-800">
                       {editingId ? 'Editar Producto' : 'Nuevo Producto'}
@@ -608,20 +617,9 @@ const InventoryList: React.FC<InventoryListProps> = ({ inventory, setInventory, 
                             className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none font-bold text-slate-800 text-center"
                         />
                     </div>
-                    <div className="flex flex-wrap gap-1 mt-2 justify-center">
-                        {[6, 12, 24].map(size => (
-                            <button
-                                key={`plus-${size}`}
-                                onClick={() => setFormData({...formData, quantity: (formData.quantity || 0) + size})}
-                                className="px-2 py-1 bg-white text-emerald-600 rounded-md text-[10px] font-bold hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200 active:scale-95 transition-all shadow-sm"
-                            >
-                                +{size}
-                            </button>
-                        ))}
-                    </div>
                 </div>
                 <div>
-                    <label className="block text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">Precio ($)</label>
+                    <label className="block text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">Precio Base (A) ($)</label>
                     <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600 font-bold">$</span>
                         <input 
@@ -635,8 +633,44 @@ const InventoryList: React.FC<InventoryListProps> = ({ inventory, setInventory, 
                     </div>
                 </div>
               </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-xs font-bold text-blue-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                        <Tag size={12} /> Precio Mayor (B) ($)
+                    </label>
+                    <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 font-bold">$</span>
+                        <input 
+                            type="number" 
+                            min="0"
+                            value={formData.priceBUSD}
+                            onChange={(e) => setFormData({...formData, priceBUSD: parseFloat(e.target.value) || 0})}
+                            className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-blue-100 focus:ring-2 focus:ring-blue-200 outline-none font-medium text-blue-600 bg-white text-sm"
+                            placeholder="Opcional"
+                        />
+                    </div>
+                 </div>
+                 <div>
+                    <label className="block text-xs font-bold text-purple-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                        <Tag size={12} /> Precio VIP (C) ($)
+                    </label>
+                    <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-purple-500 font-bold">$</span>
+                        <input 
+                            type="number" 
+                            min="0"
+                            value={formData.priceCUSD}
+                            onChange={(e) => setFormData({...formData, priceCUSD: parseFloat(e.target.value) || 0})}
+                            className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-purple-100 focus:ring-2 focus:ring-purple-200 outline-none font-medium text-purple-600 bg-white text-sm"
+                            placeholder="Opcional"
+                        />
+                    </div>
+                 </div>
+              </div>
+
             </div>
-            <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 sticky bottom-0 z-20">
               <button 
                 onClick={() => setShowModal(false)}
                 className="px-5 py-2.5 text-slate-500 font-bold text-xs hover:bg-slate-200 rounded-xl transition-colors active:scale-95"
